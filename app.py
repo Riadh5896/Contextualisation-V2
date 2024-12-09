@@ -15,6 +15,7 @@ from langchain.chains import create_history_aware_retriever
 from langchain_huggingface import HuggingFaceEmbeddings
 from PIL import Image
 import time
+import uuid
 
 
 st.set_page_config(page_title="Contextualisation-V2",
@@ -107,6 +108,17 @@ def process_preloaded_csv_files(file_paths):
     db = FAISS.from_documents(split_docs, embeddings_model)
     return db.as_retriever()
 
+
+def filter_relevant_documents(documents, query):
+    """Filter documents based on the query. Only include documents containing query-related keywords."""
+    relevant_docs = []
+    for doc in documents:
+        # Check if any keyword in the query exists in the document content
+        if any(keyword in doc.page_content.lower() for keyword in query.lower().split()):
+            relevant_docs.append(doc)
+    return relevant_docs
+
+
 # Function to get the conversation chain
 def get_conversation_chain(retriever):
     llama_model = load_llama_model()  # Use cached Ollama model
@@ -139,6 +151,10 @@ def get_conversation_chain(retriever):
         "If the awnser is not presented in the data just say that he need to check on the internet"
         "If the question is not clear ask for more clarifications "
         "If the question is only one or two words ask for more details"
+        "If no relevant information is found, state that the user should check online. "
+        "If the question is unclear or too short, ask for more details. "
+        "If the question seems too broad or unrelated to the documents, ask for clarification. "
+        "If the input contains only a few words, request a more detailed query."
         "{context}"
     )
 
@@ -157,6 +173,11 @@ def get_conversation_chain(retriever):
     def get_session_history(session_id: str) -> BaseChatMessageHistory:
         if session_id not in store:
             store[session_id] = ChatMessageHistory()
+
+        max_history_length = 3  # Keep only the last 3 messages
+        history = store[session_id]
+        history.messages = history.messages[-max_history_length:]  # Truncate history if needed
+
         return store[session_id]
 
     conversational_rag_chain = RunnableWithMessageHistory(
@@ -210,6 +231,9 @@ PRELOADED_CSV_FILES = ["data/articles.csv"]  # Replace with actual file paths
 # st.sidebar.header("Preloaded CSV Files")
 # st.sidebar.write(f"Processing {len(PRELOADED_CSV_FILES)} preloaded CSV files:")
 
+session_id = st.session_state.get("session_id", str(uuid.uuid4()))
+
+
 for file_name in PRELOADED_CSV_FILES:
     st.sidebar.write(f"- `{file_name}`")
 
@@ -224,15 +248,21 @@ st.session_state.conversational_chain = conversational_chain
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
-user_input = st.text_input("Bonjour :raised_hand_with_fingers_splayed: comment puis-je vous assister ?")
+user_input = st.text_input("Bonjour :raised_hand_with_fingers_splayed: comment puis-je vous assister ?", key="user_input", help="Veuillez entrer votre requête", on_change=None)
 
 if st.button("Soumettre"):
-    if user_input and 'conversational_chain' in st.session_state:
-        session_id = "abc123"  # Static session ID for this demo; make it dynamic if needed
-        conversational_chain = st.session_state.conversational_chain
-        response = conversational_chain.invoke({"input": user_input}, config={"configurable": {"session_id": session_id}})
-        context_docs = response.get('context', [])
-        st.session_state.chat_history.append({"user": user_input, "bot": response['answer'], "context_docs": context_docs})
+    if user_input:
+        if len(user_input.split()) < 2:
+            st.warning("Veuillez poser une question plus détaillée avec plus de mots.")
+        
+        else:
+            st.session_state.session_id = session_id # Static session ID for this demo; make it dynamic if needed
+            conversational_chain = st.session_state.conversational_chain
+            response = conversational_chain.invoke({"input": user_input}, config={"configurable": {"session_id": session_id}})
+            context_docs = response.get('context', [])
+            st.session_state.chat_history.append({"user": user_input, "bot": response['answer'], "context_docs": context_docs})
+    else:
+        st.warning("Veuillez entrer une question.")
 
 # Display chat history
 if st.session_state.chat_history:
