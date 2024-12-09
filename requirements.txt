@@ -8,3 +8,5 @@ ollama
 pillow
 langchain-huggingface
 tiktoken
+transformers
+torch

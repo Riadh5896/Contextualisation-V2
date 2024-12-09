@@ -118,6 +118,7 @@ def get_conversation_chain(retriever):
         "Please respond in French only."
         "If the awnser is not presented in the data just say that he need to check on the internet"
         "If the question is not clear ask for more clarifications "
+        "If the question is only one or two words ask for more details"
     )
 
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
@@ -137,6 +138,7 @@ def get_conversation_chain(retriever):
         "Always respond in French."
         "If the awnser is not presented in the data just say that he need to check on the internet"
         "If the question is not clear ask for more clarifications "
+        "If the question is only one or two words ask for more details"
         "{context}"
     )
 
