@@ -188,7 +188,7 @@ def add_logo(logo_path, width, height):
     modified_logo = logo.resize((width, height))
     return modified_logo
 
-my_logo = add_logo(logo_path="/home/riadh/RAG-V2/Logo_du_Ministère_de_la_Cybersécurité_et_du_Numérique.svg.png", width=250, height=100)
+my_logo = add_logo(logo_path="Logo_du_Ministère_de_la_Cybersécurité_et_du_Numérique.svg.png", width=250, height=100)
 st.sidebar.image(my_logo)
 
 with st.spinner('Chargement..'):
@@ -204,7 +204,7 @@ with st.popover(":mega: Note d'information"):
 
 
 # Preloaded CSV files
-PRELOADED_CSV_FILES = ["/home/riadh/RAG-V2/data/articles.csv"]  # Replace with actual file paths
+PRELOADED_CSV_FILES = ["data/articles.csv"]  # Replace with actual file paths
 # st.sidebar.header("Preloaded CSV Files")
 # st.sidebar.write(f"Processing {len(PRELOADED_CSV_FILES)} preloaded CSV files:")
 
