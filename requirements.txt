@@ -7,3 +7,4 @@ faiss-cpu
 ollama
 pillow
 langchain-huggingface
+tiktoken
