@@ -9,5 +9,5 @@ pillow
 langchain-huggingface
 tiktoken
 transformers
-torch==2.4.0+cu121
+torch==2.4.0
 uuid
