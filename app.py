@@ -8,8 +8,9 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import RetrievalQA
 from sentence_transformers import SentenceTransformer, util
-#from htmlTemplate import css, bot_template, user_template
+
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain.chains import create_history_aware_retriever
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -109,14 +110,21 @@ def process_preloaded_csv_files(file_paths):
     return db.as_retriever()
 
 
-def filter_relevant_documents(documents, query):
-    """Filter documents based on the query. Only include documents containing query-related keywords."""
-    relevant_docs = []
-    for doc in documents:
-        # Check if any keyword in the query exists in the document content
-        if any(keyword in doc.page_content.lower() for keyword in query.lower().split()):
-            relevant_docs.append(doc)
-    return relevant_docs
+def calculate_similarity_score(answer: str, context_docs: list) -> float:
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    context_docs = [doc.page_content for doc in context_docs]
+    # Encode the answer and context documents
+    answer_embedding = model.encode(answer, convert_to_tensor=True)
+    context_embeddings = model.encode(context_docs, convert_to_tensor=True)
+
+    # Calculate cosine similarities
+    similarities = util.pytorch_cos_sim(answer_embedding, context_embeddings)
+
+    # Return the maximum similarity score from the context documents
+    max_score = similarities.max().item() 
+    if max_score < 0.55:
+        return max_score, "Je ne peux pas trouver de réponse précise dans les documents. Vous devriez vérifier sur Internet."
+    return max_score
 
 
 # Function to get the conversation chain
@@ -187,22 +195,16 @@ def get_conversation_chain(retriever):
         history_messages_key="chat_history",
         output_messages_key="answer",
     )
+    
+
     return conversational_rag_chain
 
 
-def calculate_similarity_score(answer: str, context_docs: list) -> float:
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    context_docs = [doc.page_content for doc in context_docs]
-    # Encode the answer and context documents
-    answer_embedding = model.encode(answer, convert_to_tensor=True)
-    context_embeddings = model.encode(context_docs, convert_to_tensor=True)
 
-    # Calculate cosine similarities
-    similarities = util.pytorch_cos_sim(answer_embedding, context_embeddings)
 
-    # Return the maximum similarity score from the context documents
-    max_score = similarities.max().item() 
-    return max_score
+
+
+
 
 
 def add_logo(logo_path, width, height):
@@ -252,7 +254,7 @@ user_input = st.text_input("Bonjour :raised_hand_with_fingers_splayed: comment p
 
 if st.button("Soumettre"):
     if user_input:
-        if len(user_input.split()) < 2:
+        if len(user_input.split()) < 3:
             st.warning("Veuillez poser une question plus détaillée avec plus de mots.")
         
         else:
@@ -278,6 +280,7 @@ if st.session_state.chat_history:
             st.session_state[f"show_docs_{index}"] = False
         if f"similarity_score_{index}" not in st.session_state:
             st.session_state[f"similarity_score_{index}"] = None
+        
 
         # Layout for the buttons in a single row (horizontal alignment)
         cols = st.columns([1, 1])  # Create two equal columns for buttons

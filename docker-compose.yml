@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"  # Map local port 8501 to the container
+    volumes:
+      - .:/app  # Mount the current directory for live updates (development only)
+    environment:
+      - PYTHONUNBUFFERED=1  # Ensure logs are streamed in real-time
+    restart: always  # Automatically restart the app if it crashes
