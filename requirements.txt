@@ -7,7 +7,4 @@ faiss-cpu
 ollama
 pillow
 langchain-huggingface
-tiktoken
-transformers
-torch==2.4.0
 uuid
