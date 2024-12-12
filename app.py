@@ -10,14 +10,19 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import RetrievalQA
 from sentence_transformers import SentenceTransformer, util
-
+import fpdf
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain.chains import create_history_aware_retriever
 from langchain_huggingface import HuggingFaceEmbeddings
 from PIL import Image
 import time
 import uuid
+import setup_environment
+import environment
+import os
 
+
+#setup_environment.setup_environment()
 
 st.set_page_config(page_title="Contextualisation-V2",
                        page_icon=":books:")
@@ -29,7 +34,26 @@ background-size: cover;
 }
 </style>
 """
-
+# Add CSS for positioning the text input at the bottom
+st.markdown(
+    """
+    <style>
+    .bottom-input-container {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80%;
+        background-color: white;
+        z-index: 1000;  /* Toujours visible au-dessus des autres éléments */
+        padding: 10px;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        border-radius: 10px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 bot_template = '''
 <div style="display: flex; align-items: center; margin-bottom: 10px;">
@@ -77,14 +101,14 @@ button_style = """
 
 
 # Cache the model loading using @st.cache_resource
-#@st.cache_resource
+@st.cache_resource
 def load_llama_model():
     """Load the Ollama Llama model."""
     return Ollama(model="llama3.2")
 
 # Cache the embeddings model
 
- #@st.cache_resource
+@st.cache_resource
 def load_embeddings_model():
     """Load the HuggingFace Embeddings model."""
     return HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
@@ -136,9 +160,15 @@ def get_conversation_chain(retriever):
         "provide a response that directly addresses the user's query based on the provided documents. "
         "Do not rephrase the question or ask follow-up questions. "
         "Please respond in French only."
+        "Always respond in French"
         "If the awnser is not presented in the data just say that he need to check on the internet"
         "If the question is not clear ask for more clarifications "
         "If the question is only one or two words ask for more details"
+        "If the user is greeting you, just greet back."
+        "When appropriate, provide the answer in the form of bullet points each one in a diffrent ligne." 
+        "Never respond with jokes or humor, even if explicitly asked to."
+        "If asked what you do, say that you are here to help them with the Belgian civil code."
+        "If a question is unrelated to the Belgian civil code, state that you are only equipped to assist with matters related to the Belgian civil code."
     )
 
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
@@ -153,7 +183,7 @@ def get_conversation_chain(retriever):
     )
 
     system_prompt = (
-        "As a personal chat assistant, provide accurate and relevant information based on the provided document in 2-3 sentences. "
+        "As a personal chat assistant, provide accurate and relevant information based on the provided document in 2-6 sentences. "
         "Answer should be limited to 50 words and 2-3 sentences. Do not prompt to select answers or ask standalone questions. "
         "Always respond in French."
         "If the awnser is not presented in the data just say that he need to check on the internet"
@@ -163,6 +193,12 @@ def get_conversation_chain(retriever):
         "If the question is unclear or too short, ask for more details. "
         "If the question seems too broad or unrelated to the documents, ask for clarification. "
         "If the input contains only a few words, request a more detailed query."
+        "If the user is greeting you, just greet back."
+        "When appropriate, provide the answer in the form of bullet points." 
+        "Never respond with jokes or humor, even if explicitly asked to."
+        "If asked what you do, say that you are here to help them with the Belgian civil code."
+        "If a question is unrelated to the Belgian civil code, state that you are only equipped to assist with matters related to the Belgian civil code."
+        "Always respond in French"
         "{context}"
     )
 
@@ -199,9 +235,50 @@ def get_conversation_chain(retriever):
 
     return conversational_rag_chain
 
+from fpdf import FPDF
+import tempfile
 
+def generate_pdf(chat_history):
+    if not chat_history or not isinstance(chat_history, list):
+        raise ValueError("chat_history is empty or not in the correct format.")
 
+    try:
+        # Initialize PDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
 
+        # Add conversation to the PDF
+        for message in chat_history:
+            user_msg = message.get('user', '(Message utilisateur manquant)')
+            bot_msg = message.get('bot', '(Message bot manquant)')
+
+            # Replace unsupported characters (Optional, if needed)
+            user_msg = user_msg.replace("•", "-")
+            bot_msg = bot_msg.replace("•", "-")
+
+            # Add content to the PDF
+            pdf.set_text_color(0, 0, 255)  # User message color: Blue
+            pdf.multi_cell(0, 10, f"Utilisateur: {user_msg}")
+
+            pdf.set_text_color(255, 0, 0)  # Bot message color: Red
+            pdf.multi_cell(0, 10, f"Bot: {bot_msg}")
+            pdf.ln()  # Add space between conversations
+
+        # Save PDF to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            temp_pdf_path = temp_file.name
+            pdf.output(temp_pdf_path)
+
+        # Read binary data from the file
+        with open(temp_pdf_path, "rb") as pdf_file:
+            pdf_output = pdf_file.read()
+
+        return pdf_output
+
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        return None
 
 
 
@@ -213,18 +290,39 @@ def add_logo(logo_path, width, height):
     modified_logo = logo.resize((width, height))
     return modified_logo
 
-my_logo = add_logo(logo_path="Logo_du_Ministère_de_la_Cybersécurité_et_du_Numérique.svg.png", width=250, height=100)
+my_logo = add_logo(logo_path="Logo_du_Ministère_de_la_Cybersécurité_et_du_Numérique.svg.png", width=350, height=150)
 st.sidebar.image(my_logo)
 
-with st.spinner('Chargement..'):
-        time.sleep(5)
-st.success("Terminer!")
+
+st.sidebar.markdown(
+    "**Description du projet:**"
+)
+st.sidebar.write(
+    "Ce projet a pour but de développer un système d'IA capable de comprendre et d'appliquer le code civil belge. "
+    "Pour y parvenir, nous utilisons un modèle RAG qui permet d'adapter un grand modèle de langage (LLM) au contexte juridique spécifique du code civil belge."
+)
+# Add the dataset link to the sidebar
+st.sidebar.markdown(
+    "**Dataset:**"
+)
+st.sidebar.write(
+    "Le jeu de données utilisé pour ce projet est disponible sur Kaggle: [Belgian Statutory Article Retrieval Dataset (BSAR)](https://www.kaggle.com/datasets/thedevastator/belgian-statutory-article-retrieval-dataset-bsar)"
+)
+
+#Informe when a function is loaded 
+#with st.spinner('Chargement..'):
+  #      time.sleep(5)
+#st.success("Terminer!")
 
 
 st.title("Bienvenue chez votre agent de contextualisation :books:")
 
 with st.popover(":mega: Note d'information"):
-    st.markdown("Nous vous remercions de votre participation ! Veuillez noter que ce projet est encore en cours de développement, et de nouvelles améliorations seront disponibles prochainement.")
+    st.markdown("Nous vous remercions de votre participation ! Veuillez noter que ce projet est encore en cours de développement, "
+    "et de nouvelles améliorations seront disponibles prochainement.\n\n"
+    "Pour une expérience optimale, assurez-vous d'utiliser le mode clair. Si votre interface est sombre, appuyez sur les "
+    "trois petits points en haut à droite, puis sélectionnez Paramètres et choisissez le mode clair."
+                )
 
 
 
@@ -235,9 +333,9 @@ PRELOADED_CSV_FILES = ["data/articles.csv"]  # Replace with actual file paths
 
 session_id = st.session_state.get("session_id", str(uuid.uuid4()))
 
-
-for file_name in PRELOADED_CSV_FILES:
-    st.sidebar.write(f"- `{file_name}`")
+#Show the loaded dataset
+#for file_name in PRELOADED_CSV_FILES:
+   # st.sidebar.write(f"- `{file_name}`")
 
 # Process preloaded CSV files and initialize retriever
 retriever = process_preloaded_csv_files(PRELOADED_CSV_FILES)
@@ -250,21 +348,39 @@ st.session_state.conversational_chain = conversational_chain
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
-user_input = st.text_input("Bonjour :raised_hand_with_fingers_splayed: comment puis-je vous assister ?", key="user_input", help="Veuillez entrer votre requête", on_change=None)
+st.markdown('<div class="bottom-input-container">', unsafe_allow_html=True)
+user_input = st.text_input(
+    "Bonjour :raised_hand_with_fingers_splayed: comment puis-je vous assister ?",
+    key="user_input",
+    help="Veuillez entrer votre requête",
+    placeholder="Veuillez entrer votre requête...",
+)
+st.markdown('</div>', unsafe_allow_html=True)
+# Layout for the buttons in a single row (horizontal alignment)
+cols = st.columns([1, 1])  # Create two equal columns for buttons
 
-if st.button("Soumettre"):
-    if user_input:
-        if len(user_input.split()) < 3:
-            st.warning("Veuillez poser une question plus détaillée avec plus de mots.")
+# Render "Submit" button
+with cols[0]:
+    if st.button("Soumettre"):
+          if user_input:
+            if len(user_input.split()) < 3:
+                st.warning("Veuillez poser une question plus détaillée avec plus de mots.")
         
-        else:
-            st.session_state.session_id = session_id # Static session ID for this demo; make it dynamic if needed
-            conversational_chain = st.session_state.conversational_chain
-            response = conversational_chain.invoke({"input": user_input}, config={"configurable": {"session_id": session_id}})
-            context_docs = response.get('context', [])
-            st.session_state.chat_history.append({"user": user_input, "bot": response['answer'], "context_docs": context_docs})
-    else:
-        st.warning("Veuillez entrer une question.")
+            else:
+                st.session_state.session_id = session_id # Static session ID for this demo; make it dynamic if needed
+                conversational_chain = st.session_state.conversational_chain
+                response = conversational_chain.invoke({"input": user_input}, config={"configurable": {"session_id": session_id}})
+                context_docs = response.get('context', [])
+                st.session_state.chat_history.append({"user": user_input, "bot": response['answer'], "context_docs": context_docs})
+          else:
+            st.warning("Veuillez entrer une question.")
+
+# Render "New Chat" button
+with cols[1]:
+    if st.button("Nouvelle conversation"):
+        st.session_state.chat_history = []  # Clear chat history
+
+
 
 # Display chat history
 if st.session_state.chat_history:
@@ -308,3 +424,18 @@ if st.session_state.chat_history:
         # Display similarity score if available
         if st.session_state[f"similarity_score_{index}"] is not None:
             st.write(f"Score de similarité: {st.session_state[f'similarity_score_{index}']:.2f}")
+         # Add a download button
+        #st.write("Chat History Debug:", st.session_state.chat_history)
+        # Add a download button
+        pdf_data = generate_pdf(st.session_state.chat_history)
+
+        if pdf_data:
+            st.download_button(
+                label="Télécharger la conversation en PDF",
+                data=pdf_data,
+                file_name="historique_de_la_conversation.pdf",
+                mime="application/pdf",
+                key=f"download_pdf_{index}"  # Unique key
+            )
+        else:
+            st.error("Erreur lors de la génération du PDF. Veuillez réessayer.")

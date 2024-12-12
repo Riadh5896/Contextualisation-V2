@@ -1,1 +1,18 @@
 python-3.10.12
+
+
+
+
+if st.button("Soumettre"):
+    if user_input:
+        if len(user_input.split()) < 3:
+            st.warning("Veuillez poser une question plus détaillée avec plus de mots.")
+        
+        else:
+            st.session_state.session_id = session_id # Static session ID for this demo; make it dynamic if needed
+            conversational_chain = st.session_state.conversational_chain
+            response = conversational_chain.invoke({"input": user_input}, config={"configurable": {"session_id": session_id}})
+            context_docs = response.get('context', [])
+            st.session_state.chat_history.append({"user": user_input, "bot": response['answer'], "context_docs": context_docs})
+    else:
+        st.warning("Veuillez entrer une question.")

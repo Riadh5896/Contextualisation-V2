@@ -1,9 +1,14 @@
 import subprocess
 
-# Step 1: Run setup_environment.py
-print("Running environment setup...")
-subprocess.run(["python", "setup_environment.py"], check=True)
+try:
+    print("Running environment setup...")
+    subprocess.run(["python", "setup_environment.py"], check=True, capture_output=True)
 
-# Step 2: Run the Streamlit app
-print("Starting the Streamlit app...")
-subprocess.run(["streamlit", "run", "app.py"], check=True)
+    print("Starting the Streamlit app...")
+    subprocess.run(["streamlit", "run", "app.py"], check=True, capture_output=True)
+
+except subprocess.CalledProcessError as e:
+    print(f"Error: {e}")
+    print(f"Return code: {e.returncode}")
+    print(f"Standard output: {e.stdout.decode()}")
+    print(f"Standard error: {e.stderr.decode()}")
