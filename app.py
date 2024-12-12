@@ -115,21 +115,28 @@ def load_embeddings_model():
 
 # Function to process pre-uploaded CSV files with caching
 @st.cache_data
-def process_preloaded_csv_files(file_paths):
-    """Process pre-uploaded CSV files, split documents, and initialize a vector database retriever."""
+def process_multiple_csv_files(file_paths):
+    """Process multiple CSV files with error handling."""
     split_docs = []
     for file_path in file_paths:
-        loader = CSVLoader(file_path)
-        documents = loader.load()
-        splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-            chunk_size=512,
-            chunk_overlap=256,
-            disallowed_special=(),
-            separators=["\n\n", "\n", " "]
-        )
-        split_docs.extend(splitter.split_documents(documents))
+        if not os.path.exists(file_path):
+            st.warning(f"Skipping non-existent file: {file_path}")
+            continue
+        try:
+            loader = CSVLoader(file_path)
+            documents = loader.load()
 
-    embeddings_model = load_embeddings_model()  # Use cached embeddings model
+            splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+                chunk_size=512,
+                chunk_overlap=256,
+                disallowed_special=(),
+                separators=["\n\n", "\n", " "]
+            )
+            split_docs.extend(splitter.split_documents(documents))
+        except Exception as e:
+            st.error(f"Error processing file `{file_path}`: {e}")
+
+    embeddings_model = load_embeddings_model()
     db = FAISS.from_documents(split_docs, embeddings_model)
     return db.as_retriever()
 
@@ -327,7 +334,13 @@ with st.popover(":mega: Note d'information"):
 
 
 # Preloaded CSV files
-PRELOADED_CSV_FILES = ["data/articles.csv"]  # Replace with actual file paths
+PRELOADED_CSV_FILES = [
+    "data/articles.csv",
+    "data/article_ids.csv"                
+]  # Replace with actual file paths
+
+
+
 # st.sidebar.header("Preloaded CSV Files")
 # st.sidebar.write(f"Processing {len(PRELOADED_CSV_FILES)} preloaded CSV files:")
 
@@ -335,10 +348,10 @@ session_id = st.session_state.get("session_id", str(uuid.uuid4()))
 
 #Show the loaded dataset
 #for file_name in PRELOADED_CSV_FILES:
-   # st.sidebar.write(f"- `{file_name}`")
+    #st.sidebar.write(f"- `{file_name}`")
 
 # Process preloaded CSV files and initialize retriever
-retriever = process_preloaded_csv_files(PRELOADED_CSV_FILES)
+retriever = process_multiple_csv_files(PRELOADED_CSV_FILES)
 
 # Initialize the conversation chain
 conversational_chain = get_conversation_chain(retriever)
